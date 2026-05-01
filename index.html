@@ -10,15 +10,15 @@
     font-family: 'Segoe UI', system-ui, sans-serif;
     background: #0f172a;
     margin: 0;
-    padding: 48px 24px;
+    padding: 10px 8px;
     min-height: 100vh;
   }
   .card {
     background: #fff;
     border-radius: 16px;
-    padding: 40px 48px 36px;
-    max-width: 1500px;
-    margin: 0 auto;
+    padding: 20px 24px 20px;
+    max-width: 100%;
+    margin: 0;
     box-shadow: 0 25px 80px rgba(0,0,0,.45);
   }
   h1 {
@@ -26,7 +26,7 @@
     margin: 0 0 36px; letter-spacing: -.3px;
   }
   .scroll-wrap { overflow-x: auto; padding-bottom: 4px; }
-  .tl { min-width: 1000px; position: relative; }
+  .tl { min-width: 1200px; position: relative; }
 
   .track { display: flex; align-items: center; margin-bottom: 18px; }
   .track-name {
@@ -41,6 +41,19 @@
     overflow: visible;
   }
 
+  /* Grid lines */
+  .mo-line {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(148,163,184,.15);
+    pointer-events: none; z-index: 1;
+  }
+  .yr-line {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(100,116,139,.38);
+    pointer-events: none; z-index: 1;
+  }
+
+  /* Segments */
   .seg {
     position: absolute; top: 0; height: 100%;
     border-radius: 7px;
@@ -48,8 +61,7 @@
     overflow: hidden;
     cursor: default;
     transition: filter .15s;
-    min-width: 2px;
-    z-index: 1;
+    min-width: 2px; z-index: 2;
   }
   .seg:hover { filter: brightness(1.1) saturate(1.1); }
   .seg-txt {
@@ -60,44 +72,37 @@
     pointer-events: none; user-select: none;
   }
 
-  /* Month grid lines — very faint */
-  .mo-line {
-    position: absolute; top: 0; bottom: 0; width: 1px;
-    background: rgba(148,163,184,.18);
-    pointer-events: none; z-index: 0;
-  }
-  /* Year grid lines — stronger */
-  .yr-line {
-    position: absolute; top: 0; bottom: 0; width: 1px;
-    background: rgba(100,116,139,.4);
-    pointer-events: none; z-index: 0;
-  }
-  /* Today line — bright, extends above/below the bar */
+  /* Today line */
   .today-line {
-    position: absolute;
-    top: -6px; bottom: -6px;
-    width: 2px;
+    position: absolute; top: -7px; bottom: -7px; width: 2px;
     background: #f43f5e;
-    pointer-events: none; z-index: 10;
-    border-radius: 2px;
+    pointer-events: none; z-index: 10; border-radius: 2px;
   }
 
-  /* Axis */
+  /* Axis — two rows */
   .axis { display: flex; margin-top: 10px; }
   .axis-pad { width: 200px; min-width: 200px; }
-  .axis-inner { flex: 1; position: relative; height: 24px; }
-  .axis-tick {
-    position: absolute;
-    font-size: 11.5px; color: #94a3b8;
+  .axis-inner { flex: 1; position: relative; height: 38px; }
+
+  /* Row 1: month abbreviations */
+  .axis-mo {
+    position: absolute; top: 0;
+    font-size: 7px; font-weight: 500; color: #b0bec5;
+    transform: translateX(-50%);
+    user-select: none; white-space: nowrap;
+  }
+  /* Row 2: years + today */
+  .axis-yr {
+    position: absolute; top: 16px;
+    font-size: 12px; color: #94a3b8;
     transform: translateX(-50%);
     user-select: none;
   }
   .axis-today {
-    position: absolute;
+    position: absolute; top: 16px;
     font-size: 10px; font-weight: 700; color: #f43f5e;
     transform: translateX(-50%);
     user-select: none; white-space: nowrap;
-    top: 0;
   }
 
   /* Tooltip */
@@ -106,7 +111,7 @@
     background: #1e293b; color: #f1f5f9;
     font-size: 12.5px; line-height: 1.6;
     padding: 10px 14px; border-radius: 8px;
-    max-width: 320px;
+    max-width: 360px;
     pointer-events: none; z-index: 9999;
     box-shadow: 0 8px 28px rgba(0,0,0,.45);
     white-space: pre-wrap;
@@ -140,15 +145,17 @@ const TL_SPAN  = TL_END - TL_START;
 
 const pct  = d => ((d - TL_START) / TL_SPAN * 100).toFixed(4) + '%';
 const wPct = (a, b) => ((b - a) / TL_SPAN * 100).toFixed(4) + '%';
+// Bulgarian month abbreviations
+const MO_BG = ['Яну','Фев','Мар','Апр','Май','Юни','Юли','Авг','Сеп','Окт','Ное','Дек'];
 
-// All month boundaries for grid lines
+// All month start dates
 const MONTHS = [];
 for (let d = new Date(TL_START); d < TL_END; d.setMonth(d.getMonth() + 1)) {
   MONTHS.push(new Date(d));
 }
 const YEARS = MONTHS.filter(d => d.getMonth() === 0);
 
-// Карта: auto-calculate days
+// Карта days
 const kartaStart = toDate('11/03/2022');
 const kartaEnd   = toDate('26/08/2026');
 const kartaDays  = diffDays(kartaStart, kartaEnd);
@@ -157,15 +164,20 @@ const TRACKS = [
   {
     name: 'Карта за постоянно пребиваване, валидност',
     segs: [
-      { s: '11/03/2022', e: '26/08/2026', label: `Брой дни: ${kartaDays}`, color: '#f59e0b' },
+      { s: '11/03/2022', e: '26/08/2026',
+        label: `Брой дни: ${kartaDays}`, color: '#f59e0b' },
     ]
   },
   {
     name: 'Англия Виза',
     segs: [
-      { s: '04/01/2021', e: '12/05/2022', label: 'Студент виза',                                               color: '#3b82f6' },
-      { s: '17/10/2022', e: '08/11/2023', label: 'Студент виза 2',                                             color: '#06b6d4' },
-      { s: '14/11/2023', e: '14/11/2025', label: 'Не студент, нет трудового контракта, есть открытая фирма',   color: '#8b5cf6' },
+      { s: '04/01/2021', e: '12/05/2022',
+        label: 'Студент виза', color: '#3b82f6' },
+      { s: '17/10/2022', e: '08/11/2023',
+        label: 'Студент виза 2', color: '#06b6d4' },
+      { s: '14/11/2023', e: '14/11/2025',
+        label: 'Не студент, нет трудового контракта, есть открытая фирма В Англии, занимался бизнесом. Также есть открытая фирма в Болгарии, открыта 03.11.2022',
+        color: '#8b5cf6' },
     ]
   },
   {
@@ -175,7 +187,7 @@ const TRACKS = [
       { s: '11/05/2022', e: '28/10/2022', label: 'Брой дни: 170', color: '#10b981' },
       { s: '23/06/2023', e: '12/07/2023', label: 'Брой дни: 19',  color: '#10b981' },
       { s: '04/08/2025', e: '11/08/2025', label: 'Брой дни: 7',   color: '#10b981' },
-      { s: '14/11/2025', ongoing: true,                            color: '#10b981' }, // live: extends to today
+      { s: '14/11/2025', ongoing: true,                            color: '#10b981' },
     ]
   },
   {
@@ -189,6 +201,29 @@ const TRACKS = [
 const tl = document.getElementById('tl');
 const tt = document.getElementById('tt');
 
+function buildBar() {
+  const bar = document.createElement('div');
+  bar.className = 'bar-area';
+
+  // Month lines
+  MONTHS.forEach(m => {
+    const gl = document.createElement('div');
+    gl.className = 'mo-line';
+    gl.style.left = pct(m);
+    bar.appendChild(gl);
+  });
+
+  // Year lines (stronger, drawn over month lines)
+  YEARS.forEach(y => {
+    const gl = document.createElement('div');
+    gl.className = 'yr-line';
+    gl.style.left = pct(y);
+    bar.appendChild(gl);
+  });
+
+  return bar;
+}
+
 TRACKS.forEach(track => {
   const row = document.createElement('div');
   row.className = 'track';
@@ -198,28 +233,12 @@ TRACKS.forEach(track => {
   nm.textContent = track.name;
   row.appendChild(nm);
 
-  const bar = document.createElement('div');
-  bar.className = 'bar-area';
-
-  // Month lines first (behind everything)
-  MONTHS.forEach(m => {
-    const gl = document.createElement('div');
-    gl.className = 'mo-line';
-    gl.style.left = pct(m);
-    bar.appendChild(gl);
-  });
-  // Year lines over month lines
-  YEARS.forEach(y => {
-    const gl = document.createElement('div');
-    gl.className = 'yr-line';
-    gl.style.left = pct(y);
-    bar.appendChild(gl);
-  });
+  const bar = buildBar();
 
   track.segs.forEach(seg => {
-    const s   = toDate(seg.s);
-    const e   = seg.ongoing ? TODAY : toDate(seg.e);
-    const days = diffDays(s, e);
+    const s     = toDate(seg.s);
+    const e     = seg.ongoing ? TODAY : toDate(seg.e);
+    const days  = diffDays(s, e);
     const label = seg.ongoing ? `Брой дни: ${days}` : seg.label;
 
     const el = document.createElement('div');
@@ -234,8 +253,7 @@ TRACKS.forEach(track => {
     const eDateStr = seg.ongoing ? `${fmtDate(e)} (днес)` : fmtDate(e);
     el.addEventListener('mouseenter', ev => {
       tt.innerHTML = `<strong>${label}</strong>${fmtDate(s)} — ${eDateStr}\n<span class="tt-days">Брой дни: ${days}</span>`;
-      tt.style.display = 'block';
-      moveTT(ev);
+      tt.style.display = 'block'; moveTT(ev);
     });
     el.addEventListener('mousemove', moveTT);
     el.addEventListener('mouseleave', () => { tt.style.display = 'none'; });
@@ -243,7 +261,7 @@ TRACKS.forEach(track => {
     bar.appendChild(el);
   });
 
-  // Today line on top of everything
+  // Today line
   const todayLine = document.createElement('div');
   todayLine.className = 'today-line';
   todayLine.style.left = pct(TODAY);
@@ -253,7 +271,7 @@ TRACKS.forEach(track => {
   tl.appendChild(row);
 });
 
-// Axis
+// ── Axis ─────────────────────────────────────────────────────────
 const axisRow = document.createElement('div');
 axisRow.className = 'axis';
 const pad = document.createElement('div');
@@ -263,15 +281,27 @@ axisRow.appendChild(pad);
 const inner = document.createElement('div');
 inner.className = 'axis-inner';
 
+// Row 1: month labels (centred within each month)
+MONTHS.forEach((m, i) => {
+  const next = MONTHS[i + 1] || TL_END;
+  const mid  = new Date((m.getTime() + next.getTime()) / 2);
+  const tick = document.createElement('div');
+  tick.className = 'axis-mo';
+  tick.style.left = pct(mid);
+  tick.textContent = MO_BG[m.getMonth()];
+  inner.appendChild(tick);
+});
+
+// Row 2: year labels
 YEARS.forEach(y => {
   const tick = document.createElement('div');
-  tick.className = 'axis-tick';
+  tick.className = 'axis-yr';
   tick.style.left = pct(y);
   tick.textContent = y.getFullYear();
   inner.appendChild(tick);
 });
 
-// Today label on axis
+// Row 2: today label
 const todayTick = document.createElement('div');
 todayTick.className = 'axis-today';
 todayTick.style.left = pct(TODAY);
