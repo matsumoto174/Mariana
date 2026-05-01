@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Хронология</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f172a;
+    margin: 0;
+    padding: 48px 24px;
+    min-height: 100vh;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px 48px 36px;
+    max-width: 1500px;
+    margin: 0 auto;
+    box-shadow: 0 25px 80px rgba(0,0,0,.45);
+  }
+  h1 {
+    font-size: 21px; font-weight: 700; color: #0f172a;
+    margin: 0 0 36px; letter-spacing: -.3px;
+  }
+  .scroll-wrap { overflow-x: auto; padding-bottom: 4px; }
+  .tl { min-width: 1000px; position: relative; }
+
+  .track { display: flex; align-items: center; margin-bottom: 18px; }
+  .track-name {
+    width: 200px; min-width: 200px;
+    font-size: 11.5px; font-weight: 700; color: #374151;
+    padding-right: 16px; text-align: right; line-height: 1.4;
+  }
+  .bar-area {
+    flex: 1; height: 40px;
+    background: #f1f5f9; border-radius: 8px;
+    position: relative;
+    overflow: visible;
+  }
+
+  .seg {
+    position: absolute; top: 0; height: 100%;
+    border-radius: 7px;
+    display: flex; align-items: center;
+    overflow: hidden;
+    cursor: default;
+    transition: filter .15s;
+    min-width: 2px;
+    z-index: 1;
+  }
+  .seg:hover { filter: brightness(1.1) saturate(1.1); }
+  .seg-txt {
+    font-size: 10.5px; font-weight: 600; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    padding: 0 8px;
+    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    pointer-events: none; user-select: none;
+  }
+
+  /* Month grid lines — very faint */
+  .mo-line {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(148,163,184,.18);
+    pointer-events: none; z-index: 0;
+  }
+  /* Year grid lines — stronger */
+  .yr-line {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(100,116,139,.4);
+    pointer-events: none; z-index: 0;
+  }
+  /* Today line — bright, extends above/below the bar */
+  .today-line {
+    position: absolute;
+    top: -6px; bottom: -6px;
+    width: 2px;
+    background: #f43f5e;
+    pointer-events: none; z-index: 10;
+    border-radius: 2px;
+  }
+
+  /* Axis */
+  .axis { display: flex; margin-top: 10px; }
+  .axis-pad { width: 200px; min-width: 200px; }
+  .axis-inner { flex: 1; position: relative; height: 24px; }
+  .axis-tick {
+    position: absolute;
+    font-size: 11.5px; color: #94a3b8;
+    transform: translateX(-50%);
+    user-select: none;
+  }
+  .axis-today {
+    position: absolute;
+    font-size: 10px; font-weight: 700; color: #f43f5e;
+    transform: translateX(-50%);
+    user-select: none; white-space: nowrap;
+    top: 0;
+  }
+
+  /* Tooltip */
+  #tt {
+    position: fixed; display: none;
+    background: #1e293b; color: #f1f5f9;
+    font-size: 12.5px; line-height: 1.6;
+    padding: 10px 14px; border-radius: 8px;
+    max-width: 320px;
+    pointer-events: none; z-index: 9999;
+    box-shadow: 0 8px 28px rgba(0,0,0,.45);
+    white-space: pre-wrap;
+  }
+  #tt strong { display: block; margin-bottom: 2px; color: #e2e8f0; }
+  .tt-days { color: #7dd3fc; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Хронология</h1>
+  <div class="scroll-wrap">
+    <div class="tl" id="tl"></div>
+  </div>
+</div>
+<div id="tt"></div>
+
+<script>
+const toDate = s => {
+  const [d, m, y] = s.split('/').map(Number);
+  return new Date(y < 100 ? y + 2000 : y, m - 1, d);
+};
+const diffDays = (a, b) => Math.round((b - a) / 864e5);
+const fmtDate  = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+
+const TODAY    = new Date();
+const TL_START = new Date(2021, 0, 1);
+const TL_END   = new Date(2027, 0, 1);
+const TL_SPAN  = TL_END - TL_START;
+
+const pct  = d => ((d - TL_START) / TL_SPAN * 100).toFixed(4) + '%';
+const wPct = (a, b) => ((b - a) / TL_SPAN * 100).toFixed(4) + '%';
+
+// All month boundaries for grid lines
+const MONTHS = [];
+for (let d = new Date(TL_START); d < TL_END; d.setMonth(d.getMonth() + 1)) {
+  MONTHS.push(new Date(d));
+}
+const YEARS = MONTHS.filter(d => d.getMonth() === 0);
+
+// Карта: auto-calculate days
+const kartaStart = toDate('11/03/2022');
+const kartaEnd   = toDate('26/08/2026');
+const kartaDays  = diffDays(kartaStart, kartaEnd);
+
+const TRACKS = [
+  {
+    name: 'Карта за постоянно пребиваване, валидност',
+    segs: [
+      { s: '11/03/2022', e: '26/08/2026', label: `Брой дни: ${kartaDays}`, color: '#f59e0b' },
+    ]
+  },
+  {
+    name: 'Англия Виза',
+    segs: [
+      { s: '04/01/2021', e: '12/05/2022', label: 'Студент виза',                                               color: '#3b82f6' },
+      { s: '17/10/2022', e: '08/11/2023', label: 'Студент виза 2',                                             color: '#06b6d4' },
+      { s: '14/11/2023', e: '14/11/2025', label: 'Не студент, нет трудового контракта, есть открытая фирма',   color: '#8b5cf6' },
+    ]
+  },
+  {
+    name: 'Посещение',
+    segs: [
+      { s: '19/02/2022', e: '28/02/2022', label: 'Брой дни: 9',   color: '#10b981' },
+      { s: '11/05/2022', e: '28/10/2022', label: 'Брой дни: 170', color: '#10b981' },
+      { s: '23/06/2023', e: '12/07/2023', label: 'Брой дни: 19',  color: '#10b981' },
+      { s: '04/08/2025', e: '11/08/2025', label: 'Брой дни: 7',   color: '#10b981' },
+      { s: '14/11/2025', ongoing: true,                            color: '#10b981' }, // live: extends to today
+    ]
+  },
+  {
+    name: 'Отсъствие',
+    segs: [
+      { s: '12/07/2023', e: '04/08/2025', label: 'Брой дни: 754', color: '#ef4444' },
+    ]
+  }
+];
+
+const tl = document.getElementById('tl');
+const tt = document.getElementById('tt');
+
+TRACKS.forEach(track => {
+  const row = document.createElement('div');
+  row.className = 'track';
+
+  const nm = document.createElement('div');
+  nm.className = 'track-name';
+  nm.textContent = track.name;
+  row.appendChild(nm);
+
+  const bar = document.createElement('div');
+  bar.className = 'bar-area';
+
+  // Month lines first (behind everything)
+  MONTHS.forEach(m => {
+    const gl = document.createElement('div');
+    gl.className = 'mo-line';
+    gl.style.left = pct(m);
+    bar.appendChild(gl);
+  });
+  // Year lines over month lines
+  YEARS.forEach(y => {
+    const gl = document.createElement('div');
+    gl.className = 'yr-line';
+    gl.style.left = pct(y);
+    bar.appendChild(gl);
+  });
+
+  track.segs.forEach(seg => {
+    const s   = toDate(seg.s);
+    const e   = seg.ongoing ? TODAY : toDate(seg.e);
+    const days = diffDays(s, e);
+    const label = seg.ongoing ? `Брой дни: ${days}` : seg.label;
+
+    const el = document.createElement('div');
+    el.className = 'seg';
+    el.style.cssText = `left:${pct(s)};width:${wPct(s,e)};background:${seg.color};`;
+
+    const txt = document.createElement('span');
+    txt.className = 'seg-txt';
+    txt.textContent = label;
+    el.appendChild(txt);
+
+    const eDateStr = seg.ongoing ? `${fmtDate(e)} (днес)` : fmtDate(e);
+    el.addEventListener('mouseenter', ev => {
+      tt.innerHTML = `<strong>${label}</strong>${fmtDate(s)} — ${eDateStr}\n<span class="tt-days">Брой дни: ${days}</span>`;
+      tt.style.display = 'block';
+      moveTT(ev);
+    });
+    el.addEventListener('mousemove', moveTT);
+    el.addEventListener('mouseleave', () => { tt.style.display = 'none'; });
+
+    bar.appendChild(el);
+  });
+
+  // Today line on top of everything
+  const todayLine = document.createElement('div');
+  todayLine.className = 'today-line';
+  todayLine.style.left = pct(TODAY);
+  bar.appendChild(todayLine);
+
+  row.appendChild(bar);
+  tl.appendChild(row);
+});
+
+// Axis
+const axisRow = document.createElement('div');
+axisRow.className = 'axis';
+const pad = document.createElement('div');
+pad.className = 'axis-pad';
+axisRow.appendChild(pad);
+
+const inner = document.createElement('div');
+inner.className = 'axis-inner';
+
+YEARS.forEach(y => {
+  const tick = document.createElement('div');
+  tick.className = 'axis-tick';
+  tick.style.left = pct(y);
+  tick.textContent = y.getFullYear();
+  inner.appendChild(tick);
+});
+
+// Today label on axis
+const todayTick = document.createElement('div');
+todayTick.className = 'axis-today';
+todayTick.style.left = pct(TODAY);
+todayTick.textContent = '▲ днес';
+inner.appendChild(todayTick);
+
+axisRow.appendChild(inner);
+tl.appendChild(axisRow);
+
+function moveTT(ev) {
+  const x = ev.clientX + 14, y = ev.clientY - 8;
+  tt.style.left = (x + tt.offsetWidth > innerWidth ? ev.clientX - tt.offsetWidth - 14 : x) + 'px';
+  tt.style.top  = (y + tt.offsetHeight > innerHeight ? ev.clientY - tt.offsetHeight - 8 : y) + 'px';
+}
+</script>
+</body>
+</html>
